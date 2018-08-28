@@ -14,22 +14,23 @@ namespace ZNet
 	}
 	public class Host
 	{
+		List<RUDPPeer> RUDPPeerList = new List<RUDPPeer>();
 		public Host()
 		{ }
 
-		public void Initiate()
-		{
-			throw new NotImplementedException();
-		}
-
 		public RUDPPeer CreateRUDPPeer()
 		{
-			throw new NotImplementedException();
+			RUDPPeer peer = new RUDPPeer();
+			RUDPPeerList.Add(peer);
+			return peer;
 		}
 
 		public void Service()
 		{
-			throw new NotImplementedException();
+			for (int i = 0; i < RUDPPeerList.Count; i++)
+			{
+				RUDPPeerList[i].Service();
+			}
 		}
 	}
 }
