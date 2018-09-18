@@ -49,7 +49,9 @@ namespace ZNet
 			System.Net.IPEndPoint RemotePeerEndPoint = new System.Net.IPEndPoint(RemotePeerIPAddress, port);
 
 			RemotePeer remotepeer = TouchPeer(RemotePeerEndPoint);
-			// TODO protocol.
+			if (remotepeer.RemotePeerType == RemotePeer.RemotePeerTypes.NotDeterminedYet)
+				remotepeer.RemotePeerType = RemotePeer.RemotePeerTypes.Master;
+
 			Protocol message = new Protocol();
 			message.Header.SendType = ProtocolHeader.MessageSendType.Internal;
 			message.Data.Data = "Hello";
@@ -112,6 +114,8 @@ namespace ZNet
 				{
 					IPEndPoint ipendpoint = (IPEndPoint)SenderEndPoint;
 					RemotePeer peer = TouchPeer(ipendpoint);
+					if (peer.RemotePeerType == RemotePeer.RemotePeerTypes.NotDeterminedYet)
+						peer.RemotePeerType = RemotePeer.RemotePeerTypes.Slave;
 					Protocol message = new Protocol();
 					message.DeserializeFromBytes(incomming);
 
@@ -133,7 +137,20 @@ namespace ZNet
 			lock (isLock)
 			{
 				DispatchReceivedMessage();
+				CheckConnectivity();
 				SendOutGoingMessages();
+			}
+		}
+
+		private void CheckConnectivity()
+		{
+			var itr = RemotePeerList.GetEnumerator();
+			while (itr.MoveNext())
+			{
+				if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
+				{
+					itr.Current.Ping();
+				}
 			}
 		}
 
@@ -178,10 +195,27 @@ namespace ZNet
 			if (message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
 				DispatchInternal(senderpeer, message);
 
+			if (message.Header.SendType == ProtocolHeader.MessageSendType.Ping)
+				DispatchPing(senderpeer, message);
+
 			if (message.Header.SendType == ProtocolHeader.MessageSendType.External)
 				OnMessageReceive(message.Data.Data);
 
 			message.Dispatched++;
+		}
+
+		private void DispatchPing(RemotePeer senderpeer, Protocol message)
+		{
+			if (message.Data.Data == "Ping")
+			{
+				Protocol msg = new Protocol();
+				msg.Header.SendType = ProtocolHeader.MessageSendType.Ping;
+				msg.Data.Data = "Pong";
+				Send(senderpeer, msg);
+			}
+			if (message.Data.Data == "Pong")
+			{
+			}
 		}
 
 		private void DispatchInternal(RemotePeer senderpeer, Protocol message)

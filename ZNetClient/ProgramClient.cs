@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ZNetServer
+namespace ZNetClient
 {
-	class Program
+	class ProgramClient
 	{
 		static void Main(string[] args)
 		{
@@ -24,7 +24,7 @@ namespace ZNetServer
 				Console.WriteLine("Message received: " + data);
 			};
 
-			rudppeer.Bind("127.0.0.1", 5555);
+			ZNet.RemotePeer remotepeer = rudppeer.Connect("127.0.0.1", 5555);
 
 			while (0 == 0)
 			{
