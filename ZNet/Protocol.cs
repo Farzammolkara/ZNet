@@ -14,12 +14,14 @@ namespace ZNet
 		private int BufferIndex = 0;
 		public int Sent = 0;
 		public int Dispatched = 0;
+        internal int ReadyToDelete = 0;
 
-		public byte[] SerializeToBytes()
+        public byte[] SerializeToBytes()
 		{
 			StartWritingToBuffer();
 			WriteIntToBuffer((int)Header.SendType);
 			WriteIntToBuffer(Header.SequenceNumber);
+            WriteIntArrayToBuffer(Header.AckList);
 			WriteStringToBuffer(Data.Data);
 			byte[] sendbuffer = new byte[BufferIndex];
 			Array.Copy(Buffer, 0, sendbuffer, 0, BufferIndex);
@@ -27,7 +29,16 @@ namespace ZNet
 			return sendbuffer;
 		}
 
-		private void StartWritingToBuffer()
+        private void WriteIntArrayToBuffer(List<int> ackList)
+        {
+            WriteIntToBuffer(ackList.Count);
+            for (int i = 0; i < ackList.Count; ++i)
+            {
+                WriteIntToBuffer((int)ackList[i]);
+            }
+        }
+
+        private void StartWritingToBuffer()
 		{
 			BufferIndex = 0;
 		}
@@ -62,11 +73,24 @@ namespace ZNet
 			StartReadingFromBuffer();
 			Header.SendType = (ProtocolHeader.MessageSendType)ReadIntFromBuffer(data);
 			Header.SequenceNumber = ReadIntFromBuffer(data);
-			Data.Data = ReadStringFromBuffer(data);
-
+            Header.AckList = ReadIntArrayFromBuffer(data);
+            Data.Data = ReadStringFromBuffer(data);
 		}
 
-		private void StartReadingFromBuffer()
+        private List<int> ReadIntArrayFromBuffer(byte[] data)
+        {
+            List<int> res = new List<int>();
+            int size = ReadIntFromBuffer(data);
+            for (int i = 0; i < size; ++i)
+            {
+                int element = ReadIntFromBuffer(data);
+                res.Add(element);
+            }
+
+            return res;
+        }
+
+        private void StartReadingFromBuffer()
 		{
 			BufferIndex = 0;
 		}
@@ -107,5 +131,6 @@ namespace ZNet
 		public MessageSendType SendType;
 		public int SequenceNumber = -1;
 		public int GlobalSequenceNumber = -1;
-	}
+        public List<int> AckList = new List<int>();
+    }
 }

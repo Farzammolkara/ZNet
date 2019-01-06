@@ -32,5 +32,11 @@ namespace ZNet
 				RUDPPeerList[i].Service();
 			}
 		}
+
+        // TODO implement the destroy and remove from RUDPPeerList
+        public void Destroy(RUDPPeer peer)
+        {
+
+        }
 	}
 }
