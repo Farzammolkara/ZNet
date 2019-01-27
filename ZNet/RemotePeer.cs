@@ -19,19 +19,23 @@ namespace ZNet
 		public List<Protocol> OutGoingMessageList = new List<Protocol>();
 		public List<Protocol> IncommingMessageList = new List<Protocol>();
 		public RemotePeerTypes RemotePeerType = RemotePeerTypes.NotDeterminedYet;
+        public ConnectonStaus connectionStatus = ConnectonStaus.Disconnected;
 
         // the first int is the sequence number of the message which is carrying the acklist of incomming messages which is the second param.
         public Dictionary<int, List<int>> IncommingMessageAckPackList = new Dictionary<int, List<int>>();
 
 		private int Now, LastSendTime;
-		private const int PingInterval = 10000;
+        private int LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
+        private const int PingInterval = 2000;
+        private const int ConnectioTimeOut = 10000;
 
-		public int AddMessageToOutGoings(Protocol message)
+        public int AddMessageToOutGoings(Protocol message)
 		{
 			int sequence = GetNewSequenceNumber();
 			message.Header.SequenceNumber = sequence;
 			OutGoingMessageList.Add(message);
 
+            // TODO Wrong place. How do you know that it is gonna be sent presently.
 			LastSendTime = System.Environment.TickCount & Int32.MaxValue;
 
 			return sequence;
@@ -86,6 +90,12 @@ namespace ZNet
             }
         }
 
+        internal void ResetReceives()
+        {
+            IncommingMessageAckPackList.Clear();
+            IncommingMessageList.Clear();
+        }
+
         public List<int> GetIncommingMessageSequences(int carriermessage)
         {
             List<int> AckPack = new List<int>();
@@ -107,24 +117,56 @@ namespace ZNet
             while (ackitr.MoveNext())
             {
                 int carrierseq = ackitr.Current;
-                List<int> AckPack = IncommingMessageAckPackList[carrierseq];
-
-                var incommingmsgtodeleteitr = AckPack.GetEnumerator();
-                while (incommingmsgtodeleteitr.MoveNext())
+                if (IncommingMessageAckPackList.ContainsKey(carrierseq))
                 {
-                    int incommingmsgseqtodelete = incommingmsgtodeleteitr.Current;
+                    List<int> AckPack = IncommingMessageAckPackList[carrierseq];
 
-                    var incommingmsgitr = IncommingMessageList.GetEnumerator();
-                    while (incommingmsgitr.MoveNext())
+                    var incommingmsgtodeleteitr = AckPack.GetEnumerator();
+                    while (incommingmsgtodeleteitr.MoveNext())
                     {
-                        if (incommingmsgseqtodelete == incommingmsgitr.Current.Header.SequenceNumber)
+                        int incommingmsgseqtodelete = incommingmsgtodeleteitr.Current;
+
+                        var incommingmsgitr = IncommingMessageList.GetEnumerator();
+                        while (incommingmsgitr.MoveNext())
                         {
-                            incommingmsgitr.Current.ReadyToDelete = 1;
+                            if (incommingmsgseqtodelete == incommingmsgitr.Current.Header.SequenceNumber)
+                            {
+                                incommingmsgitr.Current.ReadyToDelete = 1;
+                            }
                         }
                     }
+                    IncommingMessageAckPackList.Remove(carrierseq);
                 }
-                IncommingMessageAckPackList.Remove(carrierseq);
             }
+        }
+
+        public void MessageReceived(Protocol message)
+        {
+            LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
+            // Check the message not to be duplicated!
+            bool redundant = false;
+            var incommingmsgitr = IncommingMessageList.GetEnumerator();
+            while (incommingmsgitr.MoveNext())
+            {
+                int seq = incommingmsgitr.Current.Header.SequenceNumber;
+                if (seq == message.Header.SequenceNumber)
+                    redundant = true;
+            }
+            if(!redundant)
+                IncommingMessageList.Add(message);
+        }
+
+        public ConnectonStaus GetConnectionStatus()
+        {
+            Now = System.Environment.TickCount & Int32.MaxValue;
+            // Retry when it's not connected
+            if ((Now - LastReceiveTime > ConnectioTimeOut))
+            {
+                connectionStatus = ConnectonStaus.Disconnected;
+                LastReceiveTime = Now;
+            }
+
+            return connectionStatus;
         }
     }
 }

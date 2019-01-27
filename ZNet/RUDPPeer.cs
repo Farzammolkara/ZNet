@@ -13,11 +13,11 @@ namespace ZNet
         private System.Net.Sockets.Socket socket;
         private System.Net.EndPoint SenderEndPoint;
         const int buff_size = 10 * 1024 * 1024;
-        private byte[] incomming = new byte[10 * 1024 * 1024];
+        private byte[] incommingBuffer = new byte[10 * 1024 * 1024];
 
         List<RemotePeer> RemotePeerList = new List<RemotePeer>();
 
-        private object isLock = new object();
+        private static object isLock = new object();
 
         public RUDPPeer()
         {
@@ -54,13 +54,15 @@ namespace ZNet
             if (remotepeer.RemotePeerType == RemotePeer.RemotePeerTypes.NotDeterminedYet)
                 remotepeer.RemotePeerType = RemotePeer.RemotePeerTypes.Master;
 
+            remotepeer.ResetReceives();
+
             Protocol message = new Protocol();
             message.Header.SendType = ProtocolHeader.MessageSendType.Internal;
             message.Data.Data = "Hello";
 
             Send(remotepeer, message);
 
-            OnConnectionStatusChange(ConnectonStaus.Connecting, remotepeer);
+            ConnectionStatusChange(ConnectonStaus.Connecting, remotepeer);
 
             return remotepeer;
         }
@@ -89,10 +91,17 @@ namespace ZNet
             var itr = RemotePeerList.GetEnumerator();
             while (itr.MoveNext())
             {
-                if (itr.Current.ipEndPoint == remotePeerEndPoint)
+                IPEndPoint tmp = itr.Current.ipEndPoint;
+                if (tmp.Equals(remotePeerEndPoint))
                     return itr.Current;
             }
             return null;
+        }
+
+        private void RemovePeer(RemotePeer remotepeer)
+        {
+            if (RemotePeerList.Contains(remotepeer))
+                RemotePeerList.Remove(remotepeer);
         }
 
         private void ReceiveLoop()
@@ -111,19 +120,33 @@ namespace ZNet
         {
             try
             {
-                int result = socket.ReceiveFrom(incomming, System.Net.Sockets.SocketFlags.None, ref SenderEndPoint);
-                if (result > 0)
+                if (socket.Available > 0)
                 {
-                    IPEndPoint ipendpoint = (IPEndPoint)SenderEndPoint;
-                    RemotePeer peer = TouchPeer(ipendpoint);
-                    if (peer.RemotePeerType == RemotePeer.RemotePeerTypes.NotDeterminedYet)
-                        peer.RemotePeerType = RemotePeer.RemotePeerTypes.Slave;
-                    Protocol message = new Protocol();
-                    message.DeserializeFromBytes(incomming);
+                    int result = socket.ReceiveFrom(incommingBuffer, System.Net.Sockets.SocketFlags.None, ref SenderEndPoint);
+                    if (result > 0)
+                    {
+                        IPEndPoint ipendpoint = (IPEndPoint)SenderEndPoint;
+                        RemotePeer remotepeer = TouchPeer(ipendpoint);
 
-                    peer.IncommingMessageList.Add(message);
-                    peer.MarkToRemoveIncommings(message.Header.AckList);
-                    peer.OutGoingAcksReceived(message.Header.AckList);
+                        Protocol message = new Protocol();
+                        message.DeserializeFromBytes(incommingBuffer);
+
+                        // if I don't know you, the message gotta be internal and a Hello! unless I'm gonna destroy that!
+                        if (remotepeer.RemotePeerType == RemotePeer.RemotePeerTypes.NotDeterminedYet)
+                        {
+                            if ((message.Header.SendType == ProtocolHeader.MessageSendType.Internal) && (message.Data.Data == "Hello"))
+                                remotepeer.RemotePeerType = RemotePeer.RemotePeerTypes.Slave;
+                            else
+                            {
+                                RemovePeer(remotepeer);
+                                return;
+                            }
+                        }
+
+                        remotepeer.MessageReceived(message);
+                        remotepeer.MarkToRemoveIncommings(message.Header.AckList);
+                        remotepeer.OutGoingAcksReceived(message.Header.AckList);
+                    }
                 }
             }
             catch (Exception e)
@@ -154,9 +177,36 @@ namespace ZNet
             {
                 if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
                 {
-                    itr.Current.Ping();
+                    if (itr.Current.GetConnectionStatus() == ConnectonStaus.Disconnected)
+                    {
+                        if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
+                        {
+                            // TODO Reconnect
+                            ConnectionStatusChange(ConnectonStaus.Disconnected, itr.Current);
+                            Disconnect();
+                            Connect(itr.Current.ipEndPoint.Address.ToString(), itr.Current.ipEndPoint.Port);
+                        }
+                        else
+                        {
+                            //TODO delete the peer
+                            ConnectionStatusChange(ConnectonStaus.Disconnected, itr.Current);
+                            RemotePeerList.Remove(itr.Current);
+                        }
+                    }
+                    else
+                    {
+                        itr.Current.Ping();
+                    }
                 }
             }
+        }
+
+        private void Disconnect()
+        {
+            socket.Shutdown(System.Net.Sockets.SocketShutdown.Both);
+            socket.Close();
+            socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
+            //socket.Disconnect(false);
         }
 
         private void SendOutGoingMessages()
@@ -199,8 +249,8 @@ namespace ZNet
                         if (message.Dispatched == 0)
                         {
                             Dispatch(peeritr.Current, message);
-                            lastSequenceNumber = message.Header.SequenceNumber;
                         }
+                        lastSequenceNumber = message.Header.SequenceNumber;
                     }
                     else
                     {
@@ -219,19 +269,23 @@ namespace ZNet
                 // TODO gotta go inside the remotepeer
                 int lastSequenceNumber = 0;
                 peeritr.Current.IncommingMessageList.Reverse();
-                var incommingmsgitr = peeritr.Current.IncommingMessageList.GetEnumerator();
+                List<Protocol> IncommingMessageListCopy = peeritr.Current.IncommingMessageList;
+
+                var incommingmsgitr = IncommingMessageListCopy.GetEnumerator();
                 while (incommingmsgitr.MoveNext())
                 {
                     //if it's the first message then dispach, if not gotta be sequenced!
                     Protocol message = incommingmsgitr.Current;
-                    if ((message.Header.SequenceNumber == lastSequenceNumber - 1))
+                    int index = IncommingMessageListCopy.IndexOf(incommingmsgitr.Current);
+
+                    if ((index == 0) || (message.Header.SequenceNumber == lastSequenceNumber - 1))
                     {
+                        lastSequenceNumber = message.Header.SequenceNumber;
                         if (message.Dispatched == 1 && message.ReadyToDelete == 1)
                         {
                             //it's ok to delete this message as we know that if it has been dispatched, it's pervious messages has been dispatched too. So,
                             //maybe there would be messages before this that we don't delete but ofc they have been dispatched before.
-                            peeritr.Current.IncommingMessageList.Remove(message);
-                            lastSequenceNumber = message.Header.SequenceNumber;
+                           // peeritr.Current.IncommingMessageList.Remove(message);
                         }
                     }
                     else
@@ -241,6 +295,7 @@ namespace ZNet
                     }
                 }
                 peeritr.Current.IncommingMessageList.Reverse();
+                //peeritr.Current.IncommingMessageList = IncommingMessageListCopy;
             }
         }
 
@@ -249,10 +304,10 @@ namespace ZNet
             if (message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
                 DispatchInternal(senderpeer, message);
 
-            if (message.Header.SendType == ProtocolHeader.MessageSendType.Ping)
+            if ((message.Header.SendType == ProtocolHeader.MessageSendType.Ping) && (senderpeer.connectionStatus == ConnectonStaus.Connected))
                 DispatchPing(senderpeer, message);
 
-            if (message.Header.SendType == ProtocolHeader.MessageSendType.External)
+            if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (senderpeer.connectionStatus == ConnectonStaus.Connected))
                 OnMessageReceive(message.Data.Data);
 
             message.Dispatched++;
@@ -262,6 +317,7 @@ namespace ZNet
         {
             if (message.Data.Data == "Ping")
             {
+                Console.WriteLine("ping received: " + message.Header.SequenceNumber);
                 Protocol msg = new Protocol();
                 msg.Header.SendType = ProtocolHeader.MessageSendType.Ping;
                 msg.Data.Data = "Pong";
@@ -269,6 +325,7 @@ namespace ZNet
             }
             if (message.Data.Data == "Pong")
             {
+                Console.WriteLine("pong received: " + message.Header.SequenceNumber);
             }
         }
 
@@ -280,12 +337,18 @@ namespace ZNet
                 msg.Header.SendType = ProtocolHeader.MessageSendType.Internal;
                 msg.Data.Data = "HandShake";
                 Send(senderpeer, msg);
-                OnConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
+                ConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
             }
             if (message.Data.Data == "HandShake")
             {
-                OnConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
+                ConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
             }
+        }
+
+        public void ConnectionStatusChange(ConnectonStaus connectionstat, RemotePeer remotepeer)
+        {
+            remotepeer.connectionStatus = connectionstat;
+            OnConnectionStatusChange(connectionstat, remotepeer);
         }
     }
 }
