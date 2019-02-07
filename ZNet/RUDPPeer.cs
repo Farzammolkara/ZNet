@@ -7,7 +7,7 @@ namespace ZNet
     public class RUDPPeer
     {
         // TODO the call back should tell Connection status change happend to which remote peer, unless log on server peer would be reddecules!
-        public event Action<ConnectonStaus, RemotePeer> OnConnectionStatusChange;
+        public event Action<RemotePeer.ConnectonStaus, RemotePeer> OnConnectionStatusChange;
         public event Action<string> OnMessageReceive;
 
         private System.Net.Sockets.Socket socket;
@@ -55,6 +55,7 @@ namespace ZNet
                 remotepeer.RemotePeerType = RemotePeer.RemotePeerTypes.Master;
 
             remotepeer.ResetReceives();
+            remotepeer.ResetSends();
 
             Protocol message = new Protocol();
             message.Header.SendType = ProtocolHeader.MessageSendType.Internal;
@@ -62,7 +63,8 @@ namespace ZNet
 
             Send(remotepeer, message);
 
-            ConnectionStatusChange(ConnectonStaus.Connecting, remotepeer);
+            //ConnectionStatusChange(ConnectonStaus.Connecting, remotepeer);
+            remotepeer.ConnectionStatusChange(RemotePeer.ConnectonStaus.Connecting);
 
             return remotepeer;
         }
@@ -79,7 +81,7 @@ namespace ZNet
 
         private RemotePeer CreatePeer(IPEndPoint remotePeerEndPoint)
         {
-            RemotePeer rp = new RemotePeer();
+            RemotePeer rp = new RemotePeer(OnConnectionStatusChange);
             rp.ipEndPoint = remotePeerEndPoint;
             RemotePeerList.Add(rp);
 
@@ -143,6 +145,9 @@ namespace ZNet
                             }
                         }
 
+                        if (message.Header.SequenceNumber < remotepeer.LastDispatchedMessage)
+                            return;
+
                         remotepeer.MessageReceived(message);
                         remotepeer.MarkToRemoveIncommings(message.Header.AckList);
                         remotepeer.OutGoingAcksReceived(message.Header.AckList);
@@ -172,33 +177,56 @@ namespace ZNet
 
         private void CheckConnectivity()
         {
-            var itr = RemotePeerList.GetEnumerator();
+            List<RemotePeer> RemotePeerListCopy = RemotePeerList;
+            var itr = RemotePeerListCopy.GetEnumerator();
             while (itr.MoveNext())
             {
-                if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
+                //if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
+                //{
+                RemotePeer tmp = itr.Current;
+                if (tmp.GetConnectionStatus() == RemotePeer.ConnectonStaus.Disconnected)
                 {
-                    if (itr.Current.GetConnectionStatus() == ConnectonStaus.Disconnected)
+                    
+                    if (tmp.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
                     {
-                        if (itr.Current.RemotePeerType == RemotePeer.RemotePeerTypes.Master)
-                        {
-                            // TODO Reconnect
-                            ConnectionStatusChange(ConnectonStaus.Disconnected, itr.Current);
-                            Disconnect();
-                            Connect(itr.Current.ipEndPoint.Address.ToString(), itr.Current.ipEndPoint.Port);
-                        }
-                        else
-                        {
-                            //TODO delete the peer
-                            ConnectionStatusChange(ConnectonStaus.Disconnected, itr.Current);
-                            RemotePeerList.Remove(itr.Current);
-                        }
+                        Console.WriteLine("Disc 1");
+                        // TODO Reconnect
+                        tmp.ConnectionStatusChange(RemotePeer.ConnectonStaus.Disconnected);
+                        Disconnect();
+                        Connect(tmp.ipEndPoint.Address.ToString(), tmp.ipEndPoint.Port);
+                        Console.WriteLine("Disc 2");
                     }
                     else
                     {
-                        itr.Current.Ping();
+                        //TODO delete the peer
+                        Console.WriteLine("Disc 3");
+                        tmp.ConnectionStatusChange(RemotePeer.ConnectonStaus.Disconnected);
+                        // TODO: Why?! 
+                        //RemotePeerList.Remove(tmp);
+                        itr.Current.shouldberemoved = true;
+                        Console.WriteLine("Disc 4");
                     }
                 }
+                else
+                {
+                    if ((tmp.RemotePeerType == RemotePeer.RemotePeerTypes.Master) && (tmp.GetConnectionStatus() == RemotePeer.ConnectonStaus.Connected))
+                    {
+                        tmp.Ping();
+                    }
+                }
+                //}
             }
+            List<RemotePeer> RemotePeerListCopys = RemotePeerList;
+            var itrremove = RemotePeerListCopys.ToArray().GetEnumerator();
+            while (itrremove.MoveNext())
+            {
+                RemotePeer tmp = (RemotePeer)itrremove.Current;
+                if (tmp.shouldberemoved)
+                {
+                    RemotePeerList.Remove(tmp);
+                }
+            }
+
         }
 
         private void Disconnect()
@@ -226,6 +254,7 @@ namespace ZNet
         private void RealSend(RemotePeer remotepeer, Protocol message)
         {
             message.Header.AckList = remotepeer.GetIncommingMessageSequences(message.Header.SequenceNumber);
+            message.Header.DispatchedList = remotepeer.GetDispatchedMessageSequences(message.Header.SequenceNumber);
             byte[] tosendbuffer = message.SerializeToBytes();
             int e = socket.SendTo(tosendbuffer, remotepeer.ipEndPoint);
             message.Sent++;
@@ -285,7 +314,7 @@ namespace ZNet
                         {
                             //it's ok to delete this message as we know that if it has been dispatched, it's pervious messages has been dispatched too. So,
                             //maybe there would be messages before this that we don't delete but ofc they have been dispatched before.
-                           // peeritr.Current.IncommingMessageList.Remove(message);
+                            // peeritr.Current.IncommingMessageList.Remove(message);
                         }
                     }
                     else
@@ -304,13 +333,14 @@ namespace ZNet
             if (message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
                 DispatchInternal(senderpeer, message);
 
-            if ((message.Header.SendType == ProtocolHeader.MessageSendType.Ping) && (senderpeer.connectionStatus == ConnectonStaus.Connected))
+            if ((message.Header.SendType == ProtocolHeader.MessageSendType.Ping) && (senderpeer.connectionStatus == RemotePeer.ConnectonStaus.Connected))
                 DispatchPing(senderpeer, message);
 
-            if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (senderpeer.connectionStatus == ConnectonStaus.Connected))
+            if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (senderpeer.connectionStatus == RemotePeer.ConnectonStaus.Connected))
                 OnMessageReceive(message.Data.Data);
 
             message.Dispatched++;
+            senderpeer.LastDispatchedMessage = message.Header.SequenceNumber;
         }
 
         private void DispatchPing(RemotePeer senderpeer, Protocol message)
@@ -337,18 +367,18 @@ namespace ZNet
                 msg.Header.SendType = ProtocolHeader.MessageSendType.Internal;
                 msg.Data.Data = "HandShake";
                 Send(senderpeer, msg);
-                ConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
+                senderpeer.ConnectionStatusChange(RemotePeer.ConnectonStaus.Connected);
             }
             if (message.Data.Data == "HandShake")
             {
-                ConnectionStatusChange(ConnectonStaus.Connected, senderpeer);
+                senderpeer.ConnectionStatusChange(RemotePeer.ConnectonStaus.Connected);
             }
         }
 
-        public void ConnectionStatusChange(ConnectonStaus connectionstat, RemotePeer remotepeer)
-        {
-            remotepeer.connectionStatus = connectionstat;
-            OnConnectionStatusChange(connectionstat, remotepeer);
-        }
+        //public void ConnectionStatusChange(ConnectonStaus connectionstat, RemotePeer remotepeer)
+        //{
+        //    remotepeer.connectionStatus = connectionstat;
+        //    OnConnectionStatusChange(connectionstat, remotepeer);
+        //}
     }
 }

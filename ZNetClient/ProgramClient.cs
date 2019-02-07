@@ -14,7 +14,7 @@ namespace ZNetClient
 
 			ZNet.RUDPPeer rudppeer = host.CreateRUDPPeer();
 
-			rudppeer.OnConnectionStatusChange += (ZNet.ConnectonStaus status, ZNet.RemotePeer RemotePeer) =>
+			rudppeer.OnConnectionStatusChange += (ZNet.RemotePeer.ConnectonStaus status, ZNet.RemotePeer RemotePeer) =>
 			{
 				Console.WriteLine("Connection status change to: " + status);
 			};

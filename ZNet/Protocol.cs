@@ -22,6 +22,7 @@ namespace ZNet
 			WriteIntToBuffer((int)Header.SendType);
 			WriteIntToBuffer(Header.SequenceNumber);
             WriteIntArrayToBuffer(Header.AckList);
+            WriteIntArrayToBuffer(Header.DispatchedList);
 			WriteStringToBuffer(Data.Data);
 			byte[] sendbuffer = new byte[BufferIndex];
 			Array.Copy(Buffer, 0, sendbuffer, 0, BufferIndex);
@@ -29,12 +30,12 @@ namespace ZNet
 			return sendbuffer;
 		}
 
-        private void WriteIntArrayToBuffer(List<int> ackList)
+        private void WriteIntArrayToBuffer(List<int> seqList)
         {
-            WriteIntToBuffer(ackList.Count);
-            for (int i = 0; i < ackList.Count; ++i)
+            WriteIntToBuffer(seqList.Count);
+            for (int i = 0; i < seqList.Count; ++i)
             {
-                WriteIntToBuffer((int)ackList[i]);
+                WriteIntToBuffer((int)seqList[i]);
             }
         }
 
@@ -74,6 +75,7 @@ namespace ZNet
 			Header.SendType = (ProtocolHeader.MessageSendType)ReadIntFromBuffer(data);
 			Header.SequenceNumber = ReadIntFromBuffer(data);
             Header.AckList = ReadIntArrayFromBuffer(data);
+            Header.DispatchedList = ReadIntArrayFromBuffer(data);
             Data.Data = ReadStringFromBuffer(data);
 		}
 
@@ -132,5 +134,6 @@ namespace ZNet
 		public int SequenceNumber = -1;
 		public int GlobalSequenceNumber = -1;
         public List<int> AckList = new List<int>();
+        public List<int> DispatchedList = new List<int>();
     }
 }

@@ -6,7 +6,17 @@ namespace ZNet
 {
 	public class RemotePeer
 	{
-		public enum RemotePeerTypes
+        public event Action<ConnectonStaus, RemotePeer> OnConnectionStatusChange;
+        //private Action<ConnectonStaus, RemotePeer> onConnectionStatusChange;
+
+        public enum ConnectonStaus
+        {
+            Disconnected = 0,
+            Connecting = 1,
+            Connected = 2,
+        }
+
+        public enum RemotePeerTypes
 		{
 			NotDeterminedYet = 0,
 			Master = 1,
@@ -15,6 +25,7 @@ namespace ZNet
 
 		public IPEndPoint ipEndPoint;
 		private int OutGoingSequenceNumber = 0;
+        public bool shouldberemoved = false;
 
 		public List<Protocol> OutGoingMessageList = new List<Protocol>();
 		public List<Protocol> IncommingMessageList = new List<Protocol>();
@@ -23,11 +34,19 @@ namespace ZNet
 
         // the first int is the sequence number of the message which is carrying the acklist of incomming messages which is the second param.
         public Dictionary<int, List<int>> IncommingMessageAckPackList = new Dictionary<int, List<int>>();
+        public Dictionary<int, List<int>> IncommingMessageDispatchedPackList = new Dictionary<int, List<int>>();
 
-		private int Now, LastSendTime;
+        private int Now, LastSendTime;
         private int LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
+        public int LastDispatchedMessage = 0;
+
         private const int PingInterval = 2000;
         private const int ConnectioTimeOut = 10000;
+
+        public RemotePeer(Action<ConnectonStaus, RemotePeer> onConnectionStatusChange)
+        {
+            OnConnectionStatusChange = onConnectionStatusChange;
+        }
 
         public int AddMessageToOutGoings(Protocol message)
 		{
@@ -92,8 +111,15 @@ namespace ZNet
 
         internal void ResetReceives()
         {
+            IncommingMessageDispatchedPackList.Clear();
             IncommingMessageAckPackList.Clear();
             IncommingMessageList.Clear();
+            LastDispatchedMessage = 0;
+        }
+
+        public void ResetSends()
+        {
+            OutGoingMessageList.Clear();
         }
 
         public List<int> GetIncommingMessageSequences(int carriermessage)
@@ -109,6 +135,24 @@ namespace ZNet
             IncommingMessageAckPackList.Add(carriermessage, AckPack);
 
             return AckPack;
+        }
+
+        public List<int> GetDispatchedMessageSequences(int carriermessage)
+        {
+            List<int> DispatchedPack = new List<int>();
+
+            var incommingmsgitr = IncommingMessageList.GetEnumerator();
+            while (incommingmsgitr.MoveNext())
+            {
+                if (incommingmsgitr.Current.Dispatched == 1)
+                {
+                    int seq = incommingmsgitr.Current.Header.SequenceNumber;
+                    DispatchedPack.Add(seq);
+                }
+            }
+            IncommingMessageDispatchedPackList.Add(carriermessage, DispatchedPack);
+
+            return DispatchedPack;
         }
 
         public void MarkToRemoveIncommings(List<int> ackList)
@@ -143,6 +187,7 @@ namespace ZNet
         public void MessageReceived(Protocol message)
         {
             LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
+            Console.Write(message.Header.SequenceNumber + "msg received at " + LastReceiveTime);
             // Check the message not to be duplicated!
             bool redundant = false;
             var incommingmsgitr = IncommingMessageList.GetEnumerator();
@@ -152,8 +197,13 @@ namespace ZNet
                 if (seq == message.Header.SequenceNumber)
                     redundant = true;
             }
-            if(!redundant)
+            if (!redundant)
+            {
                 IncommingMessageList.Add(message);
+                Console.WriteLine(" "+message.Data.Data.ToString());
+            }
+            else
+                Console.WriteLine(" Redundant");
         }
 
         public ConnectonStaus GetConnectionStatus()
@@ -162,11 +212,19 @@ namespace ZNet
             // Retry when it's not connected
             if ((Now - LastReceiveTime > ConnectioTimeOut))
             {
+                Console.Write("Disconnect at: " + Now);
+
                 connectionStatus = ConnectonStaus.Disconnected;
                 LastReceiveTime = Now;
             }
 
             return connectionStatus;
+        }
+
+        public void ConnectionStatusChange(ConnectonStaus connectionstat)
+        {
+            connectionStatus = connectionstat;
+            OnConnectionStatusChange(connectionstat, this);
         }
     }
 }

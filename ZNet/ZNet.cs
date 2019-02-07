@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 
 namespace ZNet
 {
-	public enum ConnectonStaus
-	{
-		Disconnected = 0,
-		Connecting = 1,
-		Connected = 2,
-	}
+	//public enum ConnectonStaus
+	//{
+	//	Disconnected = 0,
+	//	Connecting = 1,
+	//	Connected = 2,
+	//}
 	public class Host
 	{
 		List<RUDPPeer> RUDPPeerList = new List<RUDPPeer>();
