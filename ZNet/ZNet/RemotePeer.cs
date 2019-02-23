@@ -154,19 +154,20 @@ namespace ZNet
             {
                 Protocol message = messageitr.Current.Value;
                 int seq = messageitr.Current.Key;
-                if ((index == 0) || (seq == lastpatchedmessageseqnumber + 1))
-                {
-                    if (message.Dispatched < 1)
-                        Dispatch(message);
-                    lastpatchedmessageseqnumber = seq;
-                    message.Dispatched++;
-                    LastDispatchedMessage = message.Header.SequenceNumber;
-                    index++;
-                }
-                else
-                {
-                    break;
-                }
+				if ((index == 0) || (seq == lastpatchedmessageseqnumber + 1))
+				{
+					if (message.Dispatched < 1)
+						Dispatch(message);
+					lastpatchedmessageseqnumber = seq;
+					message.Dispatched++;
+					LastDispatchedMessage = message.Header.SequenceNumber;
+					index++;
+				}
+				else if (message.Header.SendType == ProtocolHeader.MessageSendType.Ping)
+				{
+					if (message.Dispatched < 1)
+						Dispatch(message);
+				}
             }
         }
 

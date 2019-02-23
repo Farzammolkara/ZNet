@@ -24,7 +24,7 @@ namespace ZNetServer
                 Console.WriteLine("Main: Message received: " + data);
             };
 
-            peer.Bind("192.168.1.162", 42);
+            peer.Bind("192.168.1.17", 42);
 
             while (0 == 0)
             {
