@@ -24,7 +24,7 @@ namespace ZNetClient
                 Console.WriteLine("Main: Message received: " + data);
             };
 
-            RemotePeer remotepeer = peer.Connect("192.168.1.162", 42);
+            RemotePeer remotepeer = peer.Connect("192.168.1.17", 42);
 
             while (0 == 0)
             {

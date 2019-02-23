@@ -292,7 +292,8 @@ namespace ZNet
                 int seq = incommingmsgitr.Current.Key;
                 AckPack.Add(seq);
             }
-            IncommingMessageAckPackList.Add(carriermessage, AckPack);
+            if(!IncommingMessageAckPackList.ContainsKey(carriermessage))
+                IncommingMessageAckPackList.Add(carriermessage, AckPack);
 
             return AckPack;
         }
