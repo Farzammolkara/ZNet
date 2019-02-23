@@ -167,6 +167,8 @@ namespace ZNet
 				{
 					if (message.Dispatched < 1)
 						Dispatch(message);
+					message.Dispatched++;
+					index++;
 				}
             }
         }
