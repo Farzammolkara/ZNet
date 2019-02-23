@@ -28,7 +28,7 @@ namespace ZNet
         public int LastSendTime = 0;
         private int OutGoingSequenceNumber = 0;
         private const int PingInterval = 2000;
-        private const int ConnectioTimeOut = 10000;
+        private const int ConnectioTimeOut = 100000;
         public ConnectonStaus connectionStatus = ConnectonStaus.Disconnected;
         private int LastAckedSentMessageSequence = -1;
 
@@ -291,7 +291,8 @@ namespace ZNet
                 int seq = incommingmsgitr.Current.Key;
                 AckPack.Add(seq);
             }
-            IncommingMessageAckPackList.Add(carriermessage, AckPack);
+            if(!IncommingMessageAckPackList.ContainsKey(carriermessage))
+                IncommingMessageAckPackList.Add(carriermessage, AckPack);
 
             return AckPack;
         }
