@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZNet", "ZNet\ZNet.csproj", "{4FE96454-19C7-4619-ACE9-86B1F98EC70C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZNetClient", "ZNetClient\ZNetClient.csproj", "{AC349D4E-2169-44E8-B4DF-930338FD1784}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZNetServer", "ZNetServer\ZNetServer.csproj", "{1C951B65-862B-45CC-9356-AC55BC3FA642}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4FE96454-19C7-4619-ACE9-86B1F98EC70C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FE96454-19C7-4619-ACE9-86B1F98EC70C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FE96454-19C7-4619-ACE9-86B1F98EC70C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FE96454-19C7-4619-ACE9-86B1F98EC70C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC349D4E-2169-44E8-B4DF-930338FD1784}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC349D4E-2169-44E8-B4DF-930338FD1784}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC349D4E-2169-44E8-B4DF-930338FD1784}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC349D4E-2169-44E8-B4DF-930338FD1784}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C951B65-862B-45CC-9356-AC55BC3FA642}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C951B65-862B-45CC-9356-AC55BC3FA642}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C951B65-862B-45CC-9356-AC55BC3FA642}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C951B65-862B-45CC-9356-AC55BC3FA642}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
