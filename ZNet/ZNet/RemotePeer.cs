@@ -29,6 +29,7 @@ namespace ZNet
         private int OutGoingSequenceNumber = 0;
         private const int PingInterval = 2000;
         private const int ConnectioTimeOut = 100000;
+        private int RTT = 1000;
         public ConnectonStaus connectionStatus = ConnectonStaus.Disconnected;
         private int LastAckedSentMessageSequence = -1;
 
@@ -352,13 +353,15 @@ namespace ZNet
         }
         public void ResendOutgoingMessage()
         {
+            int Now = System.Environment.TickCount & Int32.MaxValue;
             SortedDictionary<int, Protocol> OutGoingMessageListCopy = OutGoingMessageList;
             var outgoingmsgitr = OutGoingMessageListCopy.GetEnumerator();
             while (outgoingmsgitr.MoveNext())
             {
                 Protocol message = outgoingmsgitr.Current.Value;
                 //TODO This condition must be checked on tests and if required get compeleted by time(RT) or the many times that this has been happpened++
-                if ((message.Sent == 1) && (message.OutGoingReceiveAcked == 0) && (message.Header.SequenceNumber < LastAckedSentMessageSequence))
+                if ((message.Sent == 1) && (message.OutGoingReceiveAcked == 0) && (message.Header.SequenceNumber < LastAckedSentMessageSequence)
+                    && (Now - message.SentTime > RTT))
                 {
                     Console.WriteLine("RemotePeer: message sent turned to 0: " + message.Header.SequenceNumber);
                     message.Sent = 0;

@@ -188,6 +188,8 @@ namespace ZNet
 
         private void RealSend(RemotePeer remotepeer, Protocol message)
         {
+            int Now = System.Environment.TickCount & Int32.MaxValue;
+            message.SentTime = Now;
             message.Header.AckList = remotepeer.GetIncommingMessageSequences(message.Header.SequenceNumber);
             remotepeer.LastSendTime = System.Environment.TickCount & Int32.MaxValue;
             byte[] tosendbuffer = message.SerializeToBytes();

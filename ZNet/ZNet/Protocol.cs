@@ -13,7 +13,8 @@ namespace ZNet
 		private byte[] Buffer = new byte[50 * 1024];
 		private int BufferIndex = 0;
 		public int Sent = 0;
-		public int Dispatched = 0;
+        public int SentTime = 0;
+        public int Dispatched = 0;
         public int IncommingAckInformDelivered = 0;
         public int OutGoingReceiveAcked = 0;
 
