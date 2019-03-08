@@ -31,6 +31,7 @@ namespace ZNet
 
             System.Threading.Thread ReceiveThread = new System.Threading.Thread(new System.Threading.ThreadStart(ReceiveLoop));
             ReceiveThread.Start();
+            //ReceiveThread.Join();
 
             Console.WriteLine("RUDPPeer: ReceiveLoop thread created and started");
 
@@ -82,7 +83,7 @@ namespace ZNet
             return remotepeer;
         }
 
-        public void Bind(string IPV4, int port)
+        public void Bind(ref string IPV4, int port)
         {
             Console.WriteLine("RUDPPeer: socket binded to: " + IPV4 + ":" + port);
             socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Parse(IPV4), port));
@@ -142,6 +143,7 @@ namespace ZNet
 
         public void Service()
         {
+            // TODO : Check if some of this functions could be out of lock
             lock (isLock)
             {
                 DispatchReceivedMessage();
@@ -302,6 +304,7 @@ namespace ZNet
             while (remotepeer.MoveNext())
             {
                 IPEndPoint currentipendpoint = remotepeer.Current.ipEndPoint;
+                // TODO : Check if Equals does Reference equal or Value equal check
                 if (currentipendpoint.Equals(remotePeerEndPoint))
                     return remotepeer.Current;
             }

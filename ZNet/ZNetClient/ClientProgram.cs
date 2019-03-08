@@ -24,11 +24,25 @@ namespace ZNetClient
                 Console.WriteLine("Main: Message received: " + data);
             };
 
-            RemotePeer remotepeer = peer.Connect("192.168.1.17", 42);
+            RemotePeer remotepeer = peer.Connect("127.0.0.1", 42);
 
             while (0 == 0)
             {
                 host.ServiceAllPeers();
+                if (Console.KeyAvailable)
+                {
+                    ConsoleKeyInfo key = Console.ReadKey(true);
+                    switch (key.Key)
+                    {
+                       case ConsoleKey.S:
+                            Console.WriteLine("Read key and send message.");
+                            string tmp = key.ToString();
+                            remotepeer.Send(ref tmp);
+                            break;
+                        default:
+                            break;
+                    }
+                }
             }
             host.Destroy();
         }

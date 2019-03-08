@@ -28,15 +28,23 @@ namespace ZNet
         public int LastSendTime = 0;
         private int OutGoingSequenceNumber = 0;
         private const int PingInterval = 2000;
-        private const int ConnectioTimeOut = 100000;
-        private int RTT = 1000;
+        private const int ConnectioTimeOut = 10000;
+        private int MessageWithAckRTT = 100;
         public ConnectonStaus connectionStatus = ConnectonStaus.Disconnected;
         private int LastAckedSentMessageSequence = -1;
-
+        private int TotalSendTime = 0;
+        private int TotalSendCount = 0;
+        private int TotalPingPongTime = 0;
+        private int TotalPingPongCount = 0;
+        private int TotalResendCount = 0;
+        private int TotalReceiveCount = 0;
+        private int TotalRedundantReceiveCount = 0;
+        
         private int LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
         private SortedDictionary<int, Protocol> IncommingMessageList = new SortedDictionary<int, Protocol>();
         public SortedDictionary<int, Protocol> OutGoingMessageList = new SortedDictionary<int, Protocol>();
         public SortedDictionary<int, Protocol> OutgoingCopyForResend = new SortedDictionary<int, Protocol>();
+        private Dictionary<int, int> PingTime = new Dictionary<int, int>();
 
         // first int is the carrier seq, the list is the ack list it has been caried.
         private Dictionary<int, List<int>> IncommingMessageAckPackList = new Dictionary<int, List<int>>();
@@ -57,18 +65,27 @@ namespace ZNet
             Console.WriteLine("RemotePeer: Message added to Outgoings: " + message.Header.SequenceNumber + "-" + message.Data.Data);
             return messagenumber;
         }
+        public int Send(ref string stringmessage)
+        {
+            Protocol msg = new Protocol();
+            msg.Header.SendType = ProtocolHeader.MessageSendType.External;
+            msg.Data.Data = stringmessage;
+            return Send(msg);
+        }
 
         public void ConnectionStatusChange(ConnectonStaus connectionstat)
         {
             Console.WriteLine("RemotePeer: ConnectionStatues Changed from: " + connectionStatus + " to " + connectionstat);
             connectionStatus = connectionstat;
+
+            // TODO : null check for events is required
             OnConnectionStatusChange(connectionstat, this);
         }
 
         public void MessageReceived(Protocol message)
         {
             LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
-            Console.Write("RemotePeer: " + message.Header.SequenceNumber + " msg received at " + LastReceiveTime);
+            TotalReceiveCount++;
             // Check the message not to be duplicated!
             bool redundant = false;
             var incommingmsgitr = IncommingMessageList.GetEnumerator();
@@ -81,10 +98,14 @@ namespace ZNet
             if (!redundant)
             {
                 IncommingMessageList[message.Header.SequenceNumber] = message;
-                Console.WriteLine(" " + message.Data.Data.ToString());
             }
             else
+            {
+                TotalRedundantReceiveCount++;
                 Console.WriteLine(" Redundant");
+            }
+
+            Console.WriteLine("RemotePeer: " + message.Header.SequenceNumber + " msg received at " + LastReceiveTime +" data: "+ message.Data.Data.ToString() + " total receive: " + TotalReceiveCount+" total redundant: "+ TotalRedundantReceiveCount);
         }
 
         public void MarkIncommingsforAckDelivery(List<int> ackList)
@@ -126,9 +147,11 @@ namespace ZNet
                 while (ackitr.MoveNext())
                 {
                     int ackseqnumber = ackitr.Current;
-                    if (outgoingmsgseq == ackseqnumber)
+                    if ((outgoingmsgseq == ackseqnumber) && (msgitr.Current.Value.OutGoingReceiveAcked == 0))
                     {
+                        int Now = System.Environment.TickCount & Int32.MaxValue;
                         msgitr.Current.Value.OutGoingReceiveAcked = 1;
+                        msgitr.Current.Value.OutGoingAckReceiveTime = Now;
                         if (LastAckedSentMessageSequence < msgitr.Current.Key)
                             LastAckedSentMessageSequence = msgitr.Current.Key;
                     }
@@ -155,22 +178,23 @@ namespace ZNet
             {
                 Protocol message = messageitr.Current.Value;
                 int seq = messageitr.Current.Key;
-				if ((index == 0) || (seq == lastpatchedmessageseqnumber + 1))
-				{
-					if (message.Dispatched < 1)
-						Dispatch(message);
-					lastpatchedmessageseqnumber = seq;
-					message.Dispatched++;
-					LastDispatchedMessage = message.Header.SequenceNumber;
-					index++;
-				}
-				else if (message.Header.SendType == ProtocolHeader.MessageSendType.Ping)
-				{
-					if (message.Dispatched < 1)
-						Dispatch(message);
-					message.Dispatched++;
-					index++;
-				}
+                if ((index == 0) || (seq == lastpatchedmessageseqnumber + 1))
+                {
+                    // TODO : In cases like this, you can use == or != instead of </>
+                    if (message.Dispatched < 1)
+                        Dispatch(message);
+                    lastpatchedmessageseqnumber = seq;
+                    message.Dispatched++;
+                    LastDispatchedMessage = message.Header.SequenceNumber;
+                    index++;
+                }
+                else if (message.Header.SendType == ProtocolHeader.MessageSendType.Ping)
+                {
+                    if (message.Dispatched < 1)
+                        Dispatch(message);
+                    message.Dispatched++;
+                    index++;
+                }
             }
         }
 
@@ -201,8 +225,8 @@ namespace ZNet
                 Protocol message = new Protocol();
                 message.Header.SendType = ProtocolHeader.MessageSendType.Ping;
                 message.Data.Data = "Ping";
-
-                Send(message);
+                int seq = Send(message);
+                PingTime[seq] = Now;
             }
         }
 
@@ -220,13 +244,15 @@ namespace ZNet
 
         private void Dispatch(Protocol message)
         {
+            // TODO : You should use "else if"
+
             if (message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
                 DispatchInternal(message);
 
-            if ((message.Header.SendType == ProtocolHeader.MessageSendType.Ping) && (connectionStatus == ConnectonStaus.Connected))
+            else if ((message.Header.SendType == ProtocolHeader.MessageSendType.Ping) && (connectionStatus == ConnectonStaus.Connected))
                 DispatchPing(message);
 
-            if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (connectionStatus == ConnectonStaus.Connected))
+            else if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (connectionStatus == ConnectonStaus.Connected))
             {
                 Console.WriteLine("RemotePeer: Dispatch External Message:" + message.Header.SequenceNumber);
                 OnMessageReceive(message.Data.Data, this);
@@ -255,17 +281,29 @@ namespace ZNet
 
         private void DispatchPing(Protocol message)
         {
-            if (message.Data.Data == "Ping")
+            if (message.Data.Data.Contains("Ping"))
             {
                 Console.WriteLine("RemotePeer: DispatchPing: " + message.Header.SequenceNumber + ":" + message.Data.Data);
                 Protocol msg = new Protocol();
                 msg.Header.SendType = ProtocolHeader.MessageSendType.Ping;
-                msg.Data.Data = "Pong";
+                msg.Data.Data = "Pong_" + message.Header.SequenceNumber;
                 Send(msg);
             }
-            if (message.Data.Data == "Pong")
+            if (message.Data.Data.Contains("Pong"))
             {
-                Console.WriteLine("RemotePeer: DispatchPing: " + message.Header.SequenceNumber + ":" + message.Data.Data);
+                int pingseq = Convert.ToInt32(message.Data.Data.Substring(5));
+                int sendtime = 0;
+                int LRTT = -1;
+                if (PingTime.ContainsKey(pingseq))
+                {
+                    sendtime = PingTime[pingseq];
+                    int Now = System.Environment.TickCount & Int32.MaxValue;
+                    LRTT = Now - sendtime;
+                    PingTime.Remove(pingseq);
+                    TotalPingPongTime += LRTT;
+                    TotalPingPongCount++;
+                }
+                Console.WriteLine("RemotePeer: DispatchPing: " + message.Header.SequenceNumber + ":" + message.Data.Data+":With RTT: "+LRTT+" with average RTT: "+(TotalPingPongTime/TotalPingPongCount));
             }
         }
 
@@ -295,7 +333,7 @@ namespace ZNet
                 int seq = incommingmsgitr.Current.Key;
                 AckPack.Add(seq);
             }
-            if(!IncommingMessageAckPackList.ContainsKey(carriermessage))
+            if (!IncommingMessageAckPackList.ContainsKey(carriermessage))
                 IncommingMessageAckPackList.Add(carriermessage, AckPack);
 
             return AckPack;
@@ -341,9 +379,17 @@ namespace ZNet
                 Protocol message = outgoingmsgitr.Current;
                 if (message.OutGoingReceiveAcked == 1)
                 {
+                    int sendacktime = message.OutGoingAckReceiveTime - message.SentTime;
+                    TotalSendTime += sendacktime;
+                    TotalSendCount++;
                     Console.Write("RemotePeer: Remove Outgoing Message: " + message.Header.SequenceNumber);
                     OutGoingMessageList.Remove(message.Header.SequenceNumber);
                     Console.WriteLine(" OutGoingMessageList size: " + OutGoingMessageList.Count);
+                    int NewRTT = TotalSendTime / TotalSendCount;
+                    Console.WriteLine("RUDPPeer: Total send count is: "+ TotalSendCount + " redundant send: "+ TotalResendCount);
+                    Console.WriteLine("RUDPPeer: Time to send and get the ack back is: "+ sendacktime+ " average sendandack: " + NewRTT);
+                    if (NewRTT > MessageWithAckRTT)
+                        MessageWithAckRTT = NewRTT;
                 }
                 else
                 {
@@ -361,10 +407,11 @@ namespace ZNet
                 Protocol message = outgoingmsgitr.Current.Value;
                 //TODO This condition must be checked on tests and if required get compeleted by time(RT) or the many times that this has been happpened++
                 if ((message.Sent == 1) && (message.OutGoingReceiveAcked == 0) && (message.Header.SequenceNumber < LastAckedSentMessageSequence)
-                    && (Now - message.SentTime > RTT))
+                    && (Now - message.SentTime > MessageWithAckRTT*2))
                 {
                     Console.WriteLine("RemotePeer: message sent turned to 0: " + message.Header.SequenceNumber);
                     message.Sent = 0;
+                    TotalResendCount++;
                 }
             }
         }

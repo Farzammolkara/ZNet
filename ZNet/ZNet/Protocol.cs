@@ -17,6 +17,7 @@ namespace ZNet
         public int Dispatched = 0;
         public int IncommingAckInformDelivered = 0;
         public int OutGoingReceiveAcked = 0;
+        public int OutGoingAckReceiveTime = 0;
 
         public byte[] SerializeToBytes()
 		{
@@ -25,12 +26,26 @@ namespace ZNet
 			WriteIntToBuffer(Header.SequenceNumber);
             WriteIntArrayToBuffer(Header.AckList);
             WriteIntArrayToBuffer(Header.DispatchedList);
-			WriteStringToBuffer(Data.Data);
+			WriteStringToBuffer(ref Data.Data);
 			byte[] sendbuffer = new byte[BufferIndex];
 			Array.Copy(Buffer, 0, sendbuffer, 0, BufferIndex);
 
 			return sendbuffer;
 		}
+
+        //public void SerializeToBytes(byte[]Buff, int Len)
+        //{
+        //    StartWritingToBuffer();
+        //    WriteIntToBuffer((int)Header.SendType);
+        //    WriteIntToBuffer(Header.SequenceNumber);
+        //    WriteIntArrayToBuffer(Header.AckList);
+        //    WriteIntArrayToBuffer(Header.DispatchedList);
+        //    WriteStringToBuffer(Data.Data);
+        //    byte[] sendbuffer = new byte[BufferIndex];
+        //    Array.Copy(Buffer, 0, sendbuffer, 0, BufferIndex);
+
+        //    return sendbuffer;
+        //}
 
         private void WriteIntArrayToBuffer(List<int> seqList)
         {
@@ -54,7 +69,7 @@ namespace ZNet
 			Buffer[BufferIndex++] = (byte)(data >> 24);
 		}
 
-		private void WriteStringToBuffer(string data)
+		private void WriteStringToBuffer(ref string data)
 		{
 			int size = 0;
 			if (string.IsNullOrEmpty(data))

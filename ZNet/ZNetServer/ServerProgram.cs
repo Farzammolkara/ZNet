@@ -24,7 +24,8 @@ namespace ZNetServer
                 Console.WriteLine("Main: Message received: " + data);
             };
 
-            peer.Bind("192.168.1.17", 42);
+            string IPV4 = "127.0.0.1";
+            peer.Bind(ref IPV4, 42);
 
             while (0 == 0)
             {
