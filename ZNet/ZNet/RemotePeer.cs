@@ -38,8 +38,9 @@ namespace ZNet
         private int TotalPingPongCount = 0;
         private int TotalResendCount = 0;
         private int TotalReceiveCount = 0;
-        private int TotalRedundantReceiveCount = 0;
-        
+        public int TotalRedundantReceiveCount = 0;
+        public int NotDeterminedYeteceiveCount = 0;
+
         private int LastReceiveTime = System.Environment.TickCount & Int32.MaxValue;
         private SortedDictionary<int, Protocol> IncommingMessageList = new SortedDictionary<int, Protocol>();
         public SortedDictionary<int, Protocol> OutGoingMessageList = new SortedDictionary<int, Protocol>();
@@ -105,7 +106,7 @@ namespace ZNet
                 Console.WriteLine(" Redundant");
             }
 
-            Console.WriteLine("RemotePeer: " + message.Header.SequenceNumber + " msg received at " + LastReceiveTime +" data: "+ message.Data.Data.ToString() + " total receive: " + TotalReceiveCount+" total redundant: "+ TotalRedundantReceiveCount);
+            Console.WriteLine("RemotePeer: msg seq: " + message.Header.SequenceNumber + " msg received at " + LastReceiveTime +" data: "+ message.Data.Data.ToString() + " total receive: " + TotalReceiveCount+" total redundant: "+ TotalRedundantReceiveCount+ " NotDetermminedPeer msg cnt: " + NotDeterminedYeteceiveCount);
         }
 
         public void MarkIncommingsforAckDelivery(List<int> ackList)
@@ -254,7 +255,7 @@ namespace ZNet
 
             else if ((message.Header.SendType == ProtocolHeader.MessageSendType.External) && (connectionStatus == ConnectonStaus.Connected))
             {
-                Console.WriteLine("RemotePeer: Dispatch External Message:" + message.Header.SequenceNumber);
+                //Console.WriteLine("RemotePeer: Dispatch External Message:" + message.Header.SequenceNumber);
                 OnMessageReceive(message.Data.Data, this);
             }
         }
@@ -274,7 +275,7 @@ namespace ZNet
             }
             if (message.Data.Data == "HandShake")
             {
-                Console.WriteLine("RemotePeer: DispatchInternal: " + message.Header.SequenceNumber + ":" + message.Data.Data);
+                //Console.WriteLine("RemotePeer: DispatchInternal: " + message.Header.SequenceNumber + ":" + message.Data.Data);
                 ConnectionStatusChange(ConnectonStaus.Connected);
             }
         }
@@ -352,7 +353,7 @@ namespace ZNet
                 if ((index == 0) || (message.Header.SequenceNumber == lastSequenceNumber + 1))
                 {
                     lastSequenceNumber = message.Header.SequenceNumber;
-                    if (message.Dispatched == 1 && message.IncommingAckInformDelivered == 1)
+                    if (message.Dispatched >= 1 && message.IncommingAckInformDelivered == 1)
                     {
                         Console.Write("RemotePeer: Remove Incomming Message: " + lastSequenceNumber);
                         IncommingMessageList.Remove(lastSequenceNumber);

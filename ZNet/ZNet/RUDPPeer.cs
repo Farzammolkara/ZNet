@@ -124,12 +124,16 @@ namespace ZNet
                             else
                             {
                                 removeRemotePeer(remotepeer);
+                                remotepeer.TotalRedundantReceiveCount++;
                                 return;
                             }
                         }
 
                         if (message.Header.SequenceNumber < remotepeer.LastDispatchedMessage)
+                        {
+                            remotepeer.TotalRedundantReceiveCount++;
                             return;
+                        }
 
                         remotepeer.MessageReceived(message);
                         remotepeer.MarkIncommingsforAckDelivery(message.Header.AckList);
@@ -183,7 +187,11 @@ namespace ZNet
                 while (msgitr.MoveNext())
                 {
                     if (msgitr.Current.Value.Sent == 0)
+                    {
+                        // Once at a time
                         RealSend(itr.Current, msgitr.Current.Value);
+                        return;
+                    }
                 }
             }
         }
