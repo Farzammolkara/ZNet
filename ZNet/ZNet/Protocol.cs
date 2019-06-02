@@ -24,8 +24,8 @@ namespace ZNet
 			StartWritingToBuffer();
 			WriteIntToBuffer((int)Header.SendType);
 			WriteIntToBuffer(Header.SequenceNumber);
-            WriteIntArrayToBuffer(Header.AckList);
-            WriteIntArrayToBuffer(Header.DispatchedList);
+            WriteIntArrayToBuffer(Header.ExternalAckList);
+            WriteIntArrayToBuffer(Header.InternalAckList);
 			WriteStringToBuffer(ref Data.Data);
 			byte[] sendbuffer = new byte[BufferIndex];
 			Array.Copy(Buffer, 0, sendbuffer, 0, BufferIndex);
@@ -91,8 +91,8 @@ namespace ZNet
 			StartReadingFromBuffer();
 			Header.SendType = (ProtocolHeader.MessageSendType)ReadIntFromBuffer(data);
 			Header.SequenceNumber = ReadIntFromBuffer(data);
-            Header.AckList = ReadIntArrayFromBuffer(data);
-            Header.DispatchedList = ReadIntArrayFromBuffer(data);
+            Header.ExternalAckList = ReadIntArrayFromBuffer(data);
+            Header.InternalAckList = ReadIntArrayFromBuffer(data);
             Data.Data = ReadStringFromBuffer(data);
 		}
 
@@ -143,14 +143,14 @@ namespace ZNet
 		public enum MessageSendType
 		{
 			Internal = 1,
-			Ping = 2,
-			External = 3,
+//			Ping = 2,
+			External = 2,
 		}
 
 		public MessageSendType SendType;
 		public int SequenceNumber = -1;
 		public int GlobalSequenceNumber = -1;
-        public List<int> AckList = new List<int>();
-        public List<int> DispatchedList = new List<int>();
+        public List<int> ExternalAckList = new List<int>();
+        public List<int> InternalAckList = new List<int>();
     }
 }

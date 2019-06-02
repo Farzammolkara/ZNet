@@ -80,6 +80,9 @@ namespace ZNet
             //remotepeer.ResendAllOutgoingMessages(outgoingtmp);
 
             remotepeer.ConnectionStatusChange(ConnectonStaus.Connecting);
+
+
+            Console.WriteLine($"RUDPPeer: <<< Number of RemotePeerList connections: {RemotePeerList.Count}");
             return remotepeer;
         }
 
@@ -124,20 +127,33 @@ namespace ZNet
                             else
                             {
                                 removeRemotePeer(remotepeer);
+                                RemotePeer.NotDeterminedYeteceiveCount++;
+                                return;
+                            }
+                        }
+
+                        if (message.Header.SendType == ProtocolHeader.MessageSendType.External)
+                        {
+                            if (message.Header.SequenceNumber < remotepeer.LastExternalDispatchedMessage)
+                            {
+                                remotepeer.TotalRedundantReceiveCount++;
+                                return;
+                            }
+                        }
+                        else if (message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
+                        {
+                            if (message.Header.SequenceNumber < remotepeer.LastInternalDispatchedMessage)
+                            {
                                 remotepeer.TotalRedundantReceiveCount++;
                                 return;
                             }
                         }
 
-                        if (message.Header.SequenceNumber < remotepeer.LastDispatchedMessage)
-                        {
-                            remotepeer.TotalRedundantReceiveCount++;
-                            return;
-                        }
-
                         remotepeer.MessageReceived(message);
-                        remotepeer.MarkIncommingsforAckDelivery(message.Header.AckList);
-                        remotepeer.OutGoingAcksReceived(message.Header.AckList);
+                        remotepeer.MarkExternalIncommingsforAckDelivery(message.Header.ExternalAckList);
+                        remotepeer.MarkInternalIncommingsforAckDelivery(message.Header.InternalAckList);
+                        remotepeer.ExternalOutGoingAcksReceived(message.Header.ExternalAckList);
+                        remotepeer.InternalOutGoingAcksReceived(message.Header.InternalAckList);
                     }
                 }
             }
@@ -155,9 +171,13 @@ namespace ZNet
                 SendOutGoingMessages();
                 RemoveIncommingMessages();
                 RemoveOutGoingMessage();
+                //No need to internal dispos! (Seems to be)
+                //{
                 ResendOutGoingMessage();
                 ManageRemoteConnections();
+                //}
             }
+            System.Threading.Thread.Sleep(1);
         }
 
         private void DispatchReceivedMessage()
@@ -183,13 +203,24 @@ namespace ZNet
             var itr = RemotePeerList.GetEnumerator();
             while (itr.MoveNext())
             {
-                var msgitr = itr.Current.OutGoingMessageList.GetEnumerator();
-                while (msgitr.MoveNext())
+                var intmsgitr = itr.Current.InternalOutGoingMessageList.GetEnumerator();
+                while (intmsgitr.MoveNext())
                 {
-                    if (msgitr.Current.Value.Sent == 0)
+                    if (intmsgitr.Current.Value.Sent == 0)
+                    {
+                        // send all internals but just one external
+                        RealSend(itr.Current, intmsgitr.Current.Value);
+                        //return;
+                    }
+                }
+
+                var extmsgitr = itr.Current.ExternalOutGoingMessageList.GetEnumerator();
+                while (extmsgitr.MoveNext())
+                {
+                    if (extmsgitr.Current.Value.Sent == 0)
                     {
                         // Once at a time
-                        RealSend(itr.Current, msgitr.Current.Value);
+                        RealSend(itr.Current, extmsgitr.Current.Value);
                         return;
                     }
                 }
@@ -200,8 +231,10 @@ namespace ZNet
         {
             int Now = System.Environment.TickCount & Int32.MaxValue;
             message.SentTime = Now;
-            message.Header.AckList = remotepeer.GetIncommingMessageSequences(message.Header.SequenceNumber);
-            remotepeer.LastSendTime = System.Environment.TickCount & Int32.MaxValue;
+            message.Header.ExternalAckList = remotepeer.GetExternalIncommingMessageSequences(message.Header.SequenceNumber);
+            message.Header.InternalAckList = remotepeer.GetInternalIncommingMessageSequences(message.Header.SequenceNumber);
+            if(message.Header.SendType == ProtocolHeader.MessageSendType.Internal)
+                remotepeer.LastInternalSendTime = System.Environment.TickCount & Int32.MaxValue;
             byte[] tosendbuffer = message.SerializeToBytes();
             Console.WriteLine("RUDPPeer: RealSend: " + message.Header.SequenceNumber + ":" + message.Data.Data);
 
@@ -238,7 +271,7 @@ namespace ZNet
 
         private void ManageRemoteConnections()
         {
-            RemotePeer [] RemotePeerListCopy = RemotePeerList.ToArray();
+            RemotePeer[] RemotePeerListCopy = RemotePeerList.ToArray();
             var peeritr = RemotePeerListCopy.GetEnumerator();
             while (peeritr.MoveNext())
             {
@@ -248,18 +281,28 @@ namespace ZNet
                     if (tmp.connectionStatus == ConnectonStaus.Disconnected)
                     {
                         // get a copy of the outgoing messages.
-                        SortedDictionary<int, Protocol> outgoingcopy = tmp.OutGoingMessageList;
+                        SortedDictionary<int, Protocol> outgoingcopy = new SortedDictionary<int, Protocol>();
+                        SortedDictionary<int, Protocol> lasttimeoutgoingcopy = new SortedDictionary<int, Protocol>();
+                        if (tmp.ExternalOutGoingMessageList.Count > 0)
+                            outgoingcopy = tmp.ExternalOutGoingMessageList;
+                        else
+                            lasttimeoutgoingcopy = tmp.OutgoingCopyForResend;
                         // disconnect
                         Disconnect();
                         // removeRemotePeer the remotepeer
                         IPEndPoint ipendpoint = tmp.ipEndPoint;
                         Console.WriteLine("RUDPPeer: Remotepeer removed from RemotePeerList: " + tmp.ipEndPoint.Address.ToString() + ":" + tmp.ipEndPoint.Port);
+                        Console.WriteLine($"RUDPPeer: >>> Number of RemotePeerList connections: {RemotePeerList.Count}");
+
                         RemotePeerList.Remove(tmp);
                         // connect
                         InitializeSocket();
                         RemotePeer newpeer = Connect(ipendpoint.Address.ToString(), ipendpoint.Port);
                         // resend
-                        newpeer.OutgoingCopyForResend = outgoingcopy;
+                        if(outgoingcopy.Count > 0)
+                            newpeer.OutgoingCopyForResend = outgoingcopy;
+                        else
+                            newpeer.OutgoingCopyForResend = lasttimeoutgoingcopy;
                     }
                 }
                 else if (tmp.RemotePeerType == RemotePeerTypes.Slave)

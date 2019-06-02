@@ -35,16 +35,17 @@ namespace ZNetClient
 
 
 
-            int send = -1;
+            int send = 0;
+            int index = 0;
             while (0 == 0)
             {
                 host.ServiceAllPeers();
-                if (send >= 0)
-                {
-                    string tmpstr = send.ToString();
-                    remotepeer.Send(ref tmpstr);
-                    send--;
-                }
+                //if (send >= 0)
+                //{
+                //    string tmpstr = send.ToString();
+                //    remotepeer.Send(ref tmpstr);
+                //    send--;
+                //}
                 if (Console.KeyAvailable)
                 {
                     ConsoleKeyInfo key = Console.ReadKey(true);
@@ -53,7 +54,15 @@ namespace ZNetClient
                         case ConsoleKey.S:
                             Console.WriteLine("Read key and send message.");
                             string tmpk = key.ToString();
-                            send = 1000;
+                            while (index < 1000)
+                            {
+                                string tmpstr = send.ToString();
+                                tmpstr = "Data" + tmpstr;
+                                remotepeer.Send(ref tmpstr);
+                                send++;
+                                index++;
+                            }
+                            index = 0;
                             /*var rpeer = remotePeerlist.GetEnumerator();
                             while (rpeer.MoveNext())
                             {
